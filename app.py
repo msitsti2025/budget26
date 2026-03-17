@@ -11,7 +11,7 @@ st.sidebar.header("필터 설정")
 # 1. 데이터 로드 (업로드된 파일명에 맞춰 수정)
 @st.cache_data
 def load_data():
-    df = pd.read_csv('26-budget2.xlsx - 26년 R&D사업 통계(내역추가).csv', skip_blank_lines=True)
+    df = pd.read_csv('26-budget2.csv', skip_blank_lines=True)
     # 실제 데이터 컬럼 인덱스에 기반한 전처리 필요 (C~J열 등)
     # 예시로 핵심 컬럼명 재정의
     df.columns.values[5] = '세부사업명'
