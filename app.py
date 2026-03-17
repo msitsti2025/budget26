@@ -8,7 +8,7 @@ st.set_page_config(page_title="2026 국가 R&D 예산 대시보드", layout="wid
 # 2. 데이터 로드 및 전처리 함수
 @st.cache_data
 def load_data():
-    df = pd.read_csv('26-budget2.csv')
+    df = pd.read_csv('26-budget2_cleaned.csv')
     
     # 숫자 클리닝 함수
     def clean_num(val):
