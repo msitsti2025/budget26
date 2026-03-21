@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>한 눈에 보는 2026년 정부 R&D 예산 — 3D 맵</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Noto Sans KR',sans-serif;background:#0b0f1a;overflow:hidden;width:100vw;height:100vh}
+
+/* ── 로딩 ── */
+#loading{position:fixed;inset:0;background:#0b0f1a;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:16px}
+.spinner{width:48px;height:48px;border:3px solid #1e293b;border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.load-text{color:#64748b;font-size:14px}
+.load-sub{color:#334155;font-size:12px}
+
+/* ── Three.js 캔버스 ── */
+#canvas-wrap{position:fixed;inset:0}
+canvas{display:block}
+
+/* ── 상단 헤더 ── */
+#topbar{position:fixed;top:0;left:0;right:0;height:54px;background:rgba(11,15,26,.88);backdrop-filter:blur(12px);border-bottom:1px solid #1e293b;display:flex;align-items:center;padding:0 20px;gap:16px;z-index:100}
+.tb-logo{display:flex;align-items:center;gap:10px}
+.tb-icon{width:32px;height:32px;background:linear-gradient(135deg,#2563eb,#7c3aed);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
+.tb-title{font-size:15px;font-weight:700;color:#e2e8f0}
+.tb-sub{font-size:11px;color:#475569;margin-top:1px}
+.tb-divider{width:1px;height:30px;background:#1e293b;margin:0 4px}
+.tb-stat{text-align:center}
+.tb-stat-val{font-size:16px;font-weight:700;color:#60a5fa}
+.tb-stat-label{font-size:10px;color:#475569}
+.tb-spacer{flex:1}
+.tb-btn{padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid;font-family:inherit;transition:all .2s}
+.tb-btn-ghost{background:transparent;border-color:#334155;color:#94a3b8}
+.tb-btn-ghost:hover{border-color:#3b82f6;color:#60a5fa}
+.tb-btn-primary{background:#2563eb;border-color:#2563eb;color:#fff}
+.tb-btn-primary:hover{background:#1d4ed8}
+
+/* ── 범례 패널 ── */
+#legend{position:fixed;left:16px;top:70px;background:rgba(11,15,26,.90);backdrop-filter:blur(10px);border:1px solid #1e293b;border-radius:12px;padding:14px;width:210px;z-index:100}
+.legend-title{font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px}
+.legend-item{display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;padding:3px 6px;border-radius:6px;transition:background .15s}
+.legend-item:hover{background:rgba(255,255,255,.05)}
+.legend-item.dimmed{opacity:.35}
+.legend-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.legend-label{font-size:11px;color:#94a3b8;flex:1}
+.legend-count{font-size:10px;color:#475569}
+.legend-sep{height:1px;background:#1e293b;margin:8px 0}
+.legend-scale{margin-top:2px}
+.legend-scale-title{font-size:10px;color:#475569;margin-bottom:6px}
+.scale-bars{display:flex;flex-direction:column;gap:4px}
+.scale-row{display:flex;align-items:center;gap:6px}
+.scale-block{background:#3b82f6;border-radius:2px;flex-shrink:0}
+.scale-text{font-size:10px;color:#64748b}
+
+/* ── 툴팁 ── */
+#tooltip{position:fixed;pointer-events:none;z-index:200;display:none;max-width:320px}
+.tt-inner{background:rgba(15,23,42,.96);border:1px solid #334155;border-radius:10px;padding:14px;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+.tt-name{font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:8px;line-height:1.4}
+.tt-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:12px}
+.tt-key{font-size:11px;color:#64748b}
+.tt-val{font-size:11px;font-weight:600;color:#94a3b8}
+.tt-val.accent{color:#60a5fa}
+.tt-domains{display:flex;flex-wrap:wrap;gap:3px;margin-top:6px}
+.tt-domain{font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600}
+.tt-blocks{margin-top:8px;border-top:1px solid #1e293b;padding-top:8px}
+.tt-block-title{font-size:10px;color:#475569;margin-bottom:5px}
+.tt-block-row{display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;gap:8px}
+.tt-block-name{color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.tt-block-val{color:#60a5fa;font-weight:600;flex-shrink:0}
+
+/* ── 컨트롤 힌트 ── */
+#hint{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(11,15,26,.80);border:1px solid #1e293b;border-radius:20px;padding:7px 18px;font-size:11px;color:#475569;z-index:100;white-space:nowrap}
+
+/* ── 선택 패널 ── */
+#info-panel{position:fixed;right:16px;top:70px;width:280px;background:rgba(11,15,26,.92);backdrop-filter:blur(10px);border:1px solid #334155;border-radius:12px;padding:16px;z-index:100;display:none}
+.ip-close{float:right;background:none;border:none;color:#475569;cursor:pointer;font-size:16px;line-height:1}
+.ip-title{font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:10px;padding-right:24px;line-height:1.4}
+.ip-row{display:flex;justify-content:space-between;margin-bottom:6px}
+.ip-key{font-size:11px;color:#64748b}
+.ip-val{font-size:11px;font-weight:600;color:#94a3b8}
+.ip-domains{display:flex;flex-wrap:wrap;gap:3px;margin:8px 0}
+.ip-blocks{margin-top:10px;border-top:1px solid #1e293b;padding-top:10px}
+.ip-blocks-title{font-size:11px;color:#475569;margin-bottom:6px}
+.ip-block{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.ip-block-bar-wrap{flex:1;height:6px;background:#1e293b;border-radius:3px;overflow:hidden}
+.ip-block-bar{height:100%;border-radius:3px}
+.ip-block-name{font-size:10px;color:#94a3b8;min-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ip-block-val{font-size:10px;color:#60a5fa;font-weight:600;white-space:nowrap}
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <div class="load-text">3D 맵 구성 중...</div>
+  <div class="load-sub" id="load-sub">데이터 로딩</div>
+</div>
+
+<!-- 헤더 -->
+<div id="topbar">
+  <div class="tb-logo">
+    <div class="tb-icon">🏙</div>
+    <div>
+      <div class="tb-title">한 눈에 보는 2026년 정부 R&D 예산 — 3D 맵</div>
+      <div class="tb-sub">세부사업 = 빌딩 · 내역사업 = 블럭 · 높이 = 예산 규모 · 과학기술혁신본부</div>
+    </div>
+  </div>
+  <div class="tb-divider"></div>
+  <div class="tb-stat"><div class="tb-stat-val" id="st-budget">-</div><div class="tb-stat-label">총 예산 (조원)</div></div>
+  <div class="tb-stat"><div class="tb-stat-val" id="st-sub">-</div><div class="tb-stat-label">세부사업</div></div>
+  <div class="tb-stat"><div class="tb-stat-val" id="st-det">-</div><div class="tb-stat-label">내역사업</div></div>
+  <div class="tb-spacer"></div>
+  <button class="tb-btn tb-btn-ghost" onclick="resetCamera()">📷 초기 시점</button>
+  <button class="tb-btn tb-btn-ghost" onclick="toggleLabel()">🏷 라벨</button>
+  <button class="tb-btn tb-btn-ghost" id="btn-ground" onclick="toggleGround()">🗺 지면</button>
+</div>
+
+<!-- 범례 -->
+<div id="legend">
+  <div class="legend-title">10대 핵심투자분야</div>
+  <div id="legend-items"></div>
+  <div class="legend-sep"></div>
+  <div class="legend-scale">
+    <div class="legend-scale-title">예산 규모 (빌딩 높이)</div>
+    <div class="scale-bars" id="scale-bars"></div>
+  </div>
+</div>
+
+<!-- 캔버스 -->
+<div id="canvas-wrap"></div>
+
+<!-- 툴팁 -->
+<div id="tooltip"><div class="tt-inner" id="tt-inner"></div></div>
+
+<!-- 선택 패널 -->
+<div id="info-panel">
+  <button class="ip-close" onclick="closePanel()">✕</button>
+  <div class="ip-title" id="ip-title"></div>
+  <div id="ip-body"></div>
+</div>
+
+<!-- 조작 힌트 -->
+<div id="hint">🖱 드래그: 회전 &nbsp;|&nbsp; 휠: 줌 &nbsp;|&nbsp; 우클릭: 이동 &nbsp;|&nbsp; 빌딩 클릭: 상세보기</div>
+
+<!-- Three.js r128 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<script>
+// ══════════════════════════════════════════
+//  상수 & 색상
+// ══════════════════════════════════════════
+const CORE10 = ['인공지능','에너지','전략기술','방산','중소벤처','기초연구','인력양성','출연기관','지역성장','재난안전'];
+const DOMAIN_COLORS = {
+  '인공지능': '#3b82f6',  '에너지':   '#f59e0b',  '전략기술': '#8b5cf6',
+  '방산':     '#374151',  '중소벤처': '#ea580c',  '기초연구': '#0891b2',
+  '인력양성': '#db2777',  '출연기관': '#059669',  '지역성장': '#65a30d',
+  '재난안전': '#dc2626',
+};
+const NONE_COLOR = '#334155';
+
+// 블록 색상 팔레트 (내역사업용 - 톤 변화)
+const BLOCK_PALETTE = [
+  '#3b82f6','#60a5fa','#93c5fd','#bfdbfe',
+  '#8b5cf6','#a78bfa','#c4b5fd',
+  '#10b981','#34d399','#6ee7b7',
+  '#f59e0b','#fbbf24','#fcd34d',
+  '#ef4444','#f87171','#fca5a5',
+  '#06b6d4','#22d3ee','#67e8f9',
+];
+
+// ══════════════════════════════════════════
+//  전역 상태
+// ══════════════════════════════════════════
+let scene, camera, renderer, controls;
+let allBuildings = [];
+let buildingMeshes = [];   // [{group, data, meshes:[]}]
+let labelSprites = [];
+let groundMesh, groundGrid;
+let showLabels = true, showGround = true;
+let maxBudget = 1;
+const HEIGHT_SCALE = 0.008;   // 백만원 → Three.js 단위
+const MAX_HEIGHT = 120;
+const BLDG_SIZE = 10;          // 빌딩 폭
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let hoveredBuilding = null;
+let selectedBuilding = null;
+
+// ══════════════════════════════════════════
+//  초기화
+// ══════════════════════════════════════════
+async function init() {
+  setSub('데이터 로딩 중...');
+  const res = await fetch('map3d.json');
+  const mapData = await res.json();
+  allBuildings = mapData.buildings;
+  maxBudget = mapData.maxBudget;
+
+  setSub('Three.js 씬 구성 중...');
+  setupScene();
+  setupLights();
+  setupGround(mapData.centers);
+  setSub('빌딩 생성 중...');
+  await buildCityAsync(allBuildings);
+  setupDomainLabels(mapData.centers);
+  setupLegend(allBuildings);
+  setupStats(allBuildings);
+  setupEvents();
+
+  document.getElementById('loading').style.display = 'none';
+  animate();
+}
+
+function setSub(t){ document.getElementById('load-sub').textContent = t; }
+
+// ══════════════════════════════════════════
+//  씬 & 카메라
+// ══════════════════════════════════════════
+function setupScene() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0b0f1a);
+  scene.fog = new THREE.FogExp2(0x0b0f1a, 0.00055);
+
+  const W = window.innerWidth, H = window.innerHeight;
+  camera = new THREE.PerspectiveCamera(45, W/H, 1, 8000);
+  camera.position.set(0, 600, 800);
+  camera.lookAt(0, 0, 0);
+
+  renderer = new THREE.WebGLRenderer({antialias: true});
+  renderer.setSize(W, H);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  document.getElementById('canvas-wrap').appendChild(renderer.domElement);
+
+  // OrbitControls 수동 구현 (CDN 미제공 대신)
+  setupOrbitControls();
+
+  window.addEventListener('resize', ()=>{
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+}
+
+// ── 간단한 OrbitControls 구현 ──
+let orbitState = {
+  isRotating: false, isPanning: false,
+  lastX: 0, lastY: 0,
+  theta: 0, phi: Math.PI/4,
+  radius: 1000,
+  target: new THREE.Vector3(0, 0, 0),
+};
+
+function setupOrbitControls() {
+  const el = renderer.domElement;
+  el.addEventListener('mousedown', e => {
+    if(e.button===0){ orbitState.isRotating=true; }
+    if(e.button===2){ orbitState.isPanning=true; }
+    orbitState.lastX = e.clientX; orbitState.lastY = e.clientY;
+  });
+  el.addEventListener('mousemove', e => {
+    const dx = e.clientX - orbitState.lastX;
+    const dy = e.clientY - orbitState.lastY;
+    orbitState.lastX = e.clientX; orbitState.lastY = e.clientY;
+    if(orbitState.isRotating){
+      orbitState.theta -= dx * 0.003;
+      orbitState.phi = Math.max(0.05, Math.min(Math.PI/2-0.02, orbitState.phi - dy*0.003));
+      updateCamera();
+    }
+    if(orbitState.isPanning){
+      const right = new THREE.Vector3();
+      const up = new THREE.Vector3(0,1,0);
+      right.crossVectors(camera.getWorldDirection(new THREE.Vector3()), up).normalize();
+      const panSpeed = orbitState.radius * 0.001;
+      orbitState.target.addScaledVector(right, -dx * panSpeed);
+      orbitState.target.y += dy * panSpeed;
+      updateCamera();
+    }
+  });
+  el.addEventListener('mouseup', ()=>{ orbitState.isRotating=false; orbitState.isPanning=false; });
+  el.addEventListener('wheel', e=>{
+    orbitState.radius = Math.max(80, Math.min(3000, orbitState.radius * (1 + e.deltaY*0.001)));
+    updateCamera();
+  }, {passive:true});
+  el.addEventListener('contextmenu', e=>e.preventDefault());
+  updateCamera();
+}
+
+function updateCamera() {
+  const {theta, phi, radius, target} = orbitState;
+  camera.position.set(
+    target.x + radius * Math.sin(phi) * Math.sin(theta),
+    target.y + radius * Math.cos(phi),
+    target.z + radius * Math.sin(phi) * Math.cos(theta)
+  );
+  camera.lookAt(target);
+}
+
+function resetCamera() {
+  orbitState.theta = 0; orbitState.phi = Math.PI/4; orbitState.radius = 1000;
+  orbitState.target.set(0,0,0);
+  updateCamera();
+}
+
+// ══════════════════════════════════════════
+//  조명
+// ══════════════════════════════════════════
+function setupLights() {
+  const ambient = new THREE.AmbientLight(0x334155, 1.2);
+  scene.add(ambient);
+
+  const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+  dirLight.position.set(300, 600, 300);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.set(2048, 2048);
+  dirLight.shadow.camera.near = 1;
+  dirLight.shadow.camera.far = 2000;
+  dirLight.shadow.camera.left = -800;
+  dirLight.shadow.camera.right = 800;
+  dirLight.shadow.camera.top = 800;
+  dirLight.shadow.camera.bottom = -800;
+  scene.add(dirLight);
+
+  // 보조 포인트 라이트 (도시 느낌)
+  const ptColors = [0x3b82f6, 0x8b5cf6, 0xf59e0b, 0x10b981];
+  const ptPositions = [[-300,200,-300],[300,200,-300],[-300,200,300],[300,200,300]];
+  ptPositions.forEach((p,i)=>{
+    const pt = new THREE.PointLight(ptColors[i], 0.4, 800);
+    pt.position.set(...p);
+    scene.add(pt);
+  });
+}
+
+// ══════════════════════════════════════════
+//  지면
+// ══════════════════════════════════════════
+function setupGround(centers) {
+  // 지면 플레이트
+  const geo = new THREE.PlaneGeometry(2400, 2400);
+  const mat = new THREE.MeshLambertMaterial({color: 0x0f172a, transparent:true, opacity:0.95});
+  groundMesh = new THREE.Mesh(geo, mat);
+  groundMesh.rotation.x = -Math.PI/2;
+  groundMesh.receiveShadow = true;
+  scene.add(groundMesh);
+
+  // 격자
+  const gridHelper = new THREE.GridHelper(2400, 80, 0x1e293b, 0x1e293b);
+  gridHelper.position.y = 0.2;
+  groundGrid = gridHelper;
+  scene.add(groundGrid);
+
+  // 분야 구역 원형 표시
+  Object.entries(centers).forEach(([name, [cx, cy]])=>{
+    const color = new THREE.Color(DOMAIN_COLORS[name] || '#334155');
+    const ringGeo = new THREE.RingGeometry(85, 92, 64);
+    const ringMat = new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.25, side:THREE.DoubleSide});
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI/2;
+    ring.position.set(cx, 0.5, cy);
+    scene.add(ring);
+
+    // 구역 바닥 채우기
+    const circGeo = new THREE.CircleGeometry(84, 64);
+    const circMat = new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.04, side:THREE.DoubleSide});
+    const circ = new THREE.Mesh(circGeo, circMat);
+    circ.rotation.x = -Math.PI/2;
+    circ.position.set(cx, 0.3, cy);
+    scene.add(circ);
+  });
+}
+
+// ══════════════════════════════════════════
+//  빌딩 생성 (비동기 청크)
+// ══════════════════════════════════════════
+async function buildCityAsync(buildings) {
+  const CHUNK = 60;
+  for(let i=0; i<buildings.length; i+=CHUNK){
+    const chunk = buildings.slice(i, i+CHUNK);
+    chunk.forEach(b => createBuilding(b));
+    setSub(`빌딩 생성 중... ${Math.min(i+CHUNK, buildings.length)} / ${buildings.length}`);
+    await new Promise(r=>setTimeout(r,0));
+  }
+}
+
+function buildingHeight(budget) {
+  // 로그 스케일: 시각적으로 차이가 보이도록
+  const logH = Math.log(budget + 1) / Math.log(maxBudget + 1);
+  return Math.max(2, logH * MAX_HEIGHT);
+}
+
+function createBuilding(b) {
+  const group = new THREE.Group();
+  group.position.set(b.x, 0, b.z);
+  group.userData = b;
+
+  // 분야 대표 색상
+  const domainColor = b.domains.length > 0
+    ? DOMAIN_COLORS[b.domains[0]] || NONE_COLOR
+    : NONE_COLOR;
+
+  const totalH = buildingHeight(b.budget);
+  const blocks = b.blocks;
+  const totalBlockBudget = blocks.reduce((s,bl)=>s+bl.budget, 0);
+
+  let yOff = 0;
+  blocks.forEach((bl, i) => {
+    const ratio = totalBlockBudget > 0 ? bl.budget / totalBlockBudget : 1/blocks.length;
+    const h = Math.max(0.5, ratio * totalH);
+    const w = BLDG_SIZE;
+
+    const geo = new THREE.BoxGeometry(w, h, w);
+    // 블록 색상: 분야 색상 기반으로 밝기 변화
+    const baseColor = new THREE.Color(BLOCK_PALETTE[i % BLOCK_PALETTE.length]);
+    // 분야 색과 블록 색을 혼합
+    const domCol = new THREE.Color(domainColor);
+    baseColor.lerp(domCol, 0.4);
+
+    const mat = new THREE.MeshLambertMaterial({
+      color: baseColor,
+      transparent: true,
+      opacity: 0.88,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.y = yOff + h/2;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData = { building: b, blockIndex: i };
+    group.add(mesh);
+    yOff += h;
+  });
+
+  // 옥상 발광 테두리
+  const edgeGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(BLDG_SIZE+0.2, totalH+0.1, BLDG_SIZE+0.2));
+  const edgeMat = new THREE.LineBasicMaterial({
+    color: new THREE.Color(domainColor),
+    transparent: true, opacity: 0.3
+  });
+  const edges = new THREE.LineSegments(edgeGeo, edgeMat);
+  edges.position.y = totalH / 2;
+  group.add(edges);
+
+  scene.add(group);
+  buildingMeshes.push({ group, data: b, edges, edgeMat, totalH });
+}
+
+// ══════════════════════════════════════════
+//  도메인 라벨 (Sprite)
+// ══════════════════════════════════════════
+function setupDomainLabels(centers) {
+  Object.entries(centers).forEach(([name, [cx, cy]])=>{
+    const sprite = makeTextSprite(name, DOMAIN_COLORS[name] || '#ffffff', 52);
+    sprite.position.set(cx, 8, cy);
+    scene.add(sprite);
+    labelSprites.push(sprite);
+  });
+}
+
+function makeTextSprite(text, color, size=40) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,512,128);
+  ctx.font = `bold ${size}px 'Noto Sans KR', sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(0,0,0,.9)'; ctx.shadowBlur = 12;
+  ctx.fillStyle = color;
+  ctx.fillText(text, 256, 64);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({map:tex, transparent:true, depthTest:false});
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(120, 30, 1);
+  return sprite;
+}
+
+// ══════════════════════════════════════════
+//  범례
+// ══════════════════════════════════════════
+function setupLegend(buildings) {
+  const counts = {};
+  CORE10.forEach(k=>counts[k]=0);
+  counts['(미분류)'] = 0;
+  buildings.forEach(b=>{
+    if(!b.domains.length){ counts['(미분류)']++; return; }
+    b.domains.forEach(d=>{ if(counts[d]!==undefined) counts[d]++; });
+  });
+
+  const el = document.getElementById('legend-items');
+  [...CORE10,'(미분류)'].forEach(name=>{
+    const color = DOMAIN_COLORS[name] || NONE_COLOR;
+    const div = document.createElement('div');
+    div.className = 'legend-item';
+    div.innerHTML = `<div class="legend-dot" style="background:${color}"></div>
+      <div class="legend-label">${name}</div>
+      <div class="legend-count">${counts[name]||0}</div>`;
+    el.appendChild(div);
+  });
+
+  // 높이 스케일
+  const sb = document.getElementById('scale-bars');
+  [{label:'1조원+', h:18},{label:'1000억', h:12},{label:'100억', h:7},{label:'10억', h:3}].forEach(s=>{
+    const row = document.createElement('div');
+    row.className='scale-row';
+    row.innerHTML=`<div class="scale-block" style="width:10px;height:${s.h}px;background:#3b82f6"></div>
+      <div class="scale-text">${s.label}</div>`;
+    sb.appendChild(row);
+  });
+}
+
+function setupStats(buildings) {
+  const total = buildings.reduce((s,b)=>s+b.budget,0);
+  const dets = buildings.reduce((s,b)=>s+b.blocks.length,0);
+  document.getElementById('st-budget').textContent = (total/1000000).toFixed(2);
+  document.getElementById('st-sub').textContent = buildings.length.toLocaleString();
+  document.getElementById('st-det').textContent = dets.toLocaleString();
+}
+
+// ══════════════════════════════════════════
+//  이벤트 (마우스 hover / click)
+// ══════════════════════════════════════════
+function setupEvents() {
+  const el = renderer.domElement;
+  el.addEventListener('mousemove', onMouseMove);
+  el.addEventListener('click', onClick);
+}
+
+function getMeshesFromScene() {
+  const meshes = [];
+  buildingMeshes.forEach(bm=>{
+    bm.group.children.forEach(c=>{
+      if(c.isMesh) meshes.push(c);
+    });
+  });
+  return meshes;
+}
+
+function onMouseMove(e) {
+  mouse.x = (e.clientX / window.innerWidth)*2-1;
+  mouse.y = -(e.clientY / window.innerHeight)*2+1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const meshes = getMeshesFromScene();
+  const hits = raycaster.intersectObjects(meshes);
+
+  const tt = document.getElementById('tooltip');
+  if(hits.length > 0) {
+    const hit = hits[0];
+    const b = hit.object.userData.building;
+    if(!b){tt.style.display='none'; hoveredBuilding=null; return;}
+
+    // 하이라이트
+    if(hoveredBuilding !== b.id) {
+      restoreHover();
+      hoveredBuilding = b.id;
+      highlightBuilding(b.id, true);
+    }
+
+    // 툴팁
+    const blocks = b.blocks.slice(0,5);
+    const moreCount = b.blocks.length - 5;
+    const domTags = b.domains.map(d=>
+      `<span class="tt-domain" style="background:${DOMAIN_COLORS[d]}22;color:${DOMAIN_COLORS[d]};border:1px solid ${DOMAIN_COLORS[d]}44">${d}</span>`
+    ).join('');
+    const blockRows = blocks.map(bl=>
+      `<div class="tt-block-row"><span class="tt-block-name">${bl.name}</span><span class="tt-block-val">${fmtB(bl.budget)}</span></div>`
+    ).join('');
+
+    document.getElementById('tt-inner').innerHTML = `
+      <div class="tt-name">${b.name}</div>
+      <div class="tt-row"><span class="tt-key">부처</span><span class="tt-val">${b.ministry}</span></div>
+      <div class="tt-row"><span class="tt-key">전문위</span><span class="tt-val">${b.committee}</span></div>
+      <div class="tt-row"><span class="tt-key">예산</span><span class="tt-val accent">${fmtB(b.budget)}</span></div>
+      <div class="tt-domains">${domTags||'<span style="color:#475569;font-size:10px">미분류</span>'}</div>
+      ${b.blocks.length>1?`<div class="tt-blocks">
+        <div class="tt-block-title">내역사업 (${b.blocks.length}개)</div>
+        ${blockRows}
+        ${moreCount>0?`<div style="font-size:10px;color:#475569">+ ${moreCount}개 더...</div>`:''}
+      </div>`:''}`;
+
+    tt.style.display = 'block';
+    tt.style.left = Math.min(e.clientX+12, window.innerWidth-340)+'px';
+    tt.style.top  = Math.min(e.clientY-10, window.innerHeight-300)+'px';
+    renderer.domElement.style.cursor = 'pointer';
+  } else {
+    restoreHover();
+    hoveredBuilding = null;
+    tt.style.display = 'none';
+    renderer.domElement.style.cursor = 'default';
+  }
+}
+
+function onClick(e) {
+  // 드래그 vs 클릭 구분
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(getMeshesFromScene());
+  if(hits.length > 0 && hits[0].object.userData.building) {
+    showPanel(hits[0].object.userData.building);
+  }
+}
+
+function highlightBuilding(id, on) {
+  buildingMeshes.forEach(bm=>{
+    if(bm.data.id === id){
+      bm.group.children.forEach(c=>{
+        if(c.isMesh){
+          c.material.emissive = on ? new THREE.Color(0x334155) : new THREE.Color(0x000000);
+          c.material.opacity = on ? 1.0 : 0.88;
+        }
+      });
+      bm.edgeMat.opacity = on ? 0.9 : 0.3;
+    }
+  });
+}
+
+function restoreHover() {
+  if(hoveredBuilding) highlightBuilding(hoveredBuilding, false);
+}
+
+// ══════════════════════════════════════════
+//  선택 패널
+// ══════════════════════════════════════════
+function showPanel(b) {
+  selectedBuilding = b.id;
+  document.getElementById('ip-title').textContent = b.name;
+  const maxBlock = Math.max(...b.blocks.map(bl=>bl.budget));
+  const domTags = b.domains.map(d=>
+    `<span class="tt-domain" style="background:${DOMAIN_COLORS[d]}22;color:${DOMAIN_COLORS[d]};border:1px solid ${DOMAIN_COLORS[d]}44;font-size:11px;padding:2px 8px;border-radius:4px">${d}</span>`
+  ).join('');
+
+  const blockRows = b.blocks.map((bl,i)=>{
+    const pct = maxBlock>0?bl.budget/maxBlock*100:0;
+    const col = BLOCK_PALETTE[i%BLOCK_PALETTE.length];
+    return `<div class="ip-block">
+      <div class="ip-block-name" title="${bl.name}">${bl.name}</div>
+      <div class="ip-block-bar-wrap"><div class="ip-block-bar" style="width:${pct}%;background:${col}"></div></div>
+      <div class="ip-block-val">${fmtB(bl.budget)}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('ip-body').innerHTML = `
+    <div class="ip-row"><span class="ip-key">부처</span><span class="ip-val">${b.ministry}</span></div>
+    <div class="ip-row"><span class="ip-key">전문위</span><span class="ip-val">${b.committee}</span></div>
+    <div class="ip-row"><span class="ip-key">총 예산</span><span class="ip-val" style="color:#60a5fa;font-size:13px">${fmtB(b.budget)}</span></div>
+    <div class="ip-domains">${domTags||'<span style="color:#475569;font-size:11px">미분류</span>'}</div>
+    ${b.blocks.length>1?`<div class="ip-blocks">
+      <div class="ip-blocks-title">내역사업 구성 (${b.blocks.length}개)</div>
+      ${blockRows}
+    </div>`:''}`;
+
+  document.getElementById('info-panel').style.display = 'block';
+}
+
+function closePanel() {
+  document.getElementById('info-panel').style.display = 'none';
+  selectedBuilding = null;
+}
+
+// ══════════════════════════════════════════
+//  토글 버튼
+// ══════════════════════════════════════════
+function toggleLabel() {
+  showLabels = !showLabels;
+  labelSprites.forEach(s=>s.visible=showLabels);
+}
+
+function toggleGround() {
+  showGround = !showGround;
+  if(groundMesh) groundMesh.visible = showGround;
+  if(groundGrid) groundGrid.visible = showGround;
+  document.getElementById('btn-ground').style.opacity = showGround ? '1' : '0.5';
+}
+
+// ══════════════════════════════════════════
+//  유틸
+// ══════════════════════════════════════════
+function fmtB(v) {
+  if(v >= 1000000) return (v/1000000).toFixed(2)+'조원';
+  if(v >= 100000)  return (v/100000).toFixed(1)+'천억원';
+  if(v >= 10000)   return (v/10000).toFixed(0)+'백억원';
+  if(v >= 100)     return (v/100).toFixed(0)+'억원';
+  return v+'백만원';
+}
+
+// ══════════════════════════════════════════
+//  렌더 루프
+// ══════════════════════════════════════════
+function animate() {
+  requestAnimationFrame(animate);
+  renderer.render(scene, camera);
+}
+
+// ── 시작 ──
+init().catch(e=>{
+  document.getElementById('loading').innerHTML=`
+    <div style="color:#ef4444;text-align:center">
+      <div style="font-size:40px">⚠️</div>
+      <div style="margin-top:12px;color:#e2e8f0">${e.message}</div>
+      <div style="font-size:12px;color:#475569;margin-top:6px">map3d.json 파일을 확인하세요</div>
+    </div>`;
+});
+</script>
+</body>
+</html>
